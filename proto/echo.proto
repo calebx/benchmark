@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package echo;
+
+option go_package = "./echo;echo";
+
+service EchoService {
+  rpc Echo(EchoRequest) returns (EchoResponse);
+  rpc EchoStream(stream EchoRequest) returns (stream EchoResponse);
+}
+
+message EchoRequest {
+  bytes payload = 1;
+}
+
+message EchoResponse {
+  bytes payload = 1;
+}
