@@ -5,13 +5,17 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
+	"github.com/mdlayher/vsock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	pb "nothing.com/benchmark/proto/echo"
 )
 
@@ -104,10 +108,24 @@ func (p *ClientPool) Pick() *Client {
 	return p.streams[idx]
 }
 
+func VsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
+	return func(ctx context.Context, addr string) (net.Conn, error) {
+		return vsock.Dial(cid, port, nil)
+	}
+}
+
 func NewClientPool(addr string, size int) (*ClientPool, error) {
 	pool := &ClientPool{}
 	for i := 0; i < size; i++ {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.NewClient(addr,
+			grpc.WithContextDialer(VsockDialer(16, 5005)),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                10 * time.Second,
+				Timeout:             time.Second,
+				PermitWithoutStream: true,
+			}),
+		)
 		if err != nil {
 			return nil, err
 		}
