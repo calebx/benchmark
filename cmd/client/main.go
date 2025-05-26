@@ -65,12 +65,15 @@ func main() {
 		if err != nil {
 			defer func() {
 				_ = client.stream.CloseSend()
-				pool.streams[idx], _ = NewClient("127.0.0.1:5005")
+				pool.streams[idx], err = NewClient("127.0.0.1:5005")
+				if err != nil {
+					log.Printf("failed to recreate client: %v", err)
+				}
 			}()
 
 			log.Printf("stream error: %v", err)
 			if err == io.EOF {
-				return c.JSON(http.StatusBadGateway, &Resp{Code: 502, Message: "Stream closed"})
+				return c.JSON(http.StatusInternalServerError, &Resp{Code: 500, Message: "Stream closed"})
 			}
 			return c.JSON(http.StatusInternalServerError, &Resp{Code: 500, Message: err.Error()})
 		}
