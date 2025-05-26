@@ -150,7 +150,11 @@ func NewClient(addr string) (*Client, error) {
 func NewClientPool(addr string, size int) (*ClientPool, error) {
 	pool := &ClientPool{}
 	for i := 0; i < size; i++ {
-		pool.streams = append(pool.streams)
+		client, err := NewClient(addr)
+		if err != nil {
+			return nil, err
+		}
+		pool.streams = append(pool.streams, client)
 	}
 	return pool, nil
 }
