@@ -60,9 +60,14 @@ func main() {
 			})
 		}
 
-		client := pool.Pick()
+		client, idx := pool.Pick()
 		respStr, err := client.Proxy(req.XID)
 		if err != nil {
+			defer func() {
+				_ = client.stream.CloseSend()
+				pool.streams[idx], _ = NewClient("127.0.0.1:5005")
+			}()
+
 			log.Printf("stream error: %v", err)
 			if err == io.EOF {
 				return c.JSON(http.StatusBadGateway, &Resp{Code: 502, Message: "Stream closed"})
@@ -100,12 +105,13 @@ func (c *Client) Proxy(xid string) (string, error) {
 }
 
 type ClientPool struct {
+	mu      sync.Mutex
 	streams []*Client
 }
 
-func (p *ClientPool) Pick() *Client {
+func (p *ClientPool) Pick() (*Client, int) {
 	idx := rand.Intn(len(p.streams))
-	return p.streams[idx]
+	return p.streams[idx], idx
 }
 
 func VsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
@@ -114,31 +120,34 @@ func VsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Con
 	}
 }
 
+func NewClient(addr string) (*Client, error) {
+	conn, err := grpc.NewClient(addr,
+		grpc.WithContextDialer(VsockDialer(16, 5005)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second,
+			Timeout:             time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	client := pb.NewEchoServiceClient(conn)
+	stream, err := client.EchoStream(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		stream: stream,
+	}, nil
+}
+
 func NewClientPool(addr string, size int) (*ClientPool, error) {
 	pool := &ClientPool{}
 	for i := 0; i < size; i++ {
-		conn, err := grpc.NewClient(addr,
-			grpc.WithContextDialer(VsockDialer(16, 5005)),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				Time:                10 * time.Second,
-				Timeout:             time.Second,
-				PermitWithoutStream: true,
-			}),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		client := pb.NewEchoServiceClient(conn)
-		stream, err := client.EchoStream(context.Background())
-		if err != nil {
-			return nil, err
-		}
-
-		pool.streams = append(pool.streams, &Client{
-			stream: stream,
-		})
+		pool.streams = append(pool.streams)
 	}
 	return pool, nil
 }
