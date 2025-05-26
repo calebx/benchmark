@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -119,7 +118,7 @@ func (p *ClientPool) Pick() (*Client, int) {
 
 func VsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
 	return func(ctx context.Context, addr string) (net.Conn, error) {
-		return net.Dial("tcp", net.JoinHostPort(addr, strconv.Itoa(int(port))))
+		return net.Dial("tcp", ":5005")
 	}
 }
 
