@@ -4,10 +4,8 @@ import (
 	"context"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
@@ -60,12 +58,16 @@ func main() {
 			})
 		}
 
-		client, idx := pool.Pick()
+		client := pool.Pick()
+		defer func() {
+			pool.Put(client)
+		}()
+
 		respStr, err := client.Proxy(req.XID)
 		if err != nil {
 			defer func() {
 				_ = client.stream.CloseSend()
-				pool.streams[idx], err = NewClient("127.0.0.1:5005")
+				client, err = NewClient("127.0.0.1:5005")
 				if err != nil {
 					log.Printf("failed to recreate client: %v", err)
 				}
@@ -88,14 +90,10 @@ func main() {
 }
 
 type Client struct {
-	mu     sync.Mutex
 	stream pb.EchoService_EchoStreamClient
 }
 
 func (c *Client) Proxy(xid string) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	err := c.stream.Send(&pb.EchoRequest{Payload: []byte(xid)})
 	if err != nil {
 		return "", err
@@ -108,13 +106,15 @@ func (c *Client) Proxy(xid string) (string, error) {
 }
 
 type ClientPool struct {
-	mu      sync.Mutex
-	streams []*Client
+	streamCh chan *Client
 }
 
-func (p *ClientPool) Pick() (*Client, int) {
-	idx := rand.Intn(len(p.streams))
-	return p.streams[idx], idx
+func (p *ClientPool) Pick() *Client {
+	return <-p.streamCh
+}
+
+func (p *ClientPool) Put(client *Client) {
+	p.streamCh <- client
 }
 
 func VsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
@@ -128,8 +128,8 @@ func NewClient(addr string) (*Client, error) {
 		grpc.WithContextDialer(VsockDialer(16, 5005)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
-			Timeout:             time.Second,
+			Time:                30 * time.Second,
+			Timeout:             3 * time.Second,
 			PermitWithoutStream: true,
 		}),
 	)
@@ -148,13 +148,15 @@ func NewClient(addr string) (*Client, error) {
 }
 
 func NewClientPool(addr string, size int) (*ClientPool, error) {
-	pool := &ClientPool{}
+	pool := &ClientPool{
+		streamCh: make(chan *Client, size),
+	}
 	for i := 0; i < size; i++ {
 		client, err := NewClient(addr)
 		if err != nil {
 			return nil, err
 		}
-		pool.streams = append(pool.streams, client)
+		pool.streamCh <- client
 	}
 	return pool, nil
 }
