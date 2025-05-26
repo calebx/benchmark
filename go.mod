@@ -10,15 +10,9 @@ require (
 )
 
 require (
-	github.com/mdlayher/socket v0.4.1 // indirect
-	golang.org/x/sync v0.14.0 // indirect
-)
-
-require (
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mdlayher/vsock v1.2.1
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

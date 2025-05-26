@@ -7,12 +7,12 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
-	"github.com/mdlayher/vsock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
@@ -119,7 +119,7 @@ func (p *ClientPool) Pick() (*Client, int) {
 
 func VsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
 	return func(ctx context.Context, addr string) (net.Conn, error) {
-		return vsock.Dial(cid, port, nil)
+		return net.Dial("tcp", net.JoinHostPort(addr, strconv.Itoa(int(port))))
 	}
 }
 
