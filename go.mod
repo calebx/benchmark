@@ -1,6 +1,6 @@
 module nothing.com/benchmark
 
-go 1.24.3
+go 1.24.2
 
 require (
 	github.com/json-iterator/go v1.1.12
