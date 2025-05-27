@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/keepalive"
 	pb "nothing.com/benchmark/proto/echo"
 )
