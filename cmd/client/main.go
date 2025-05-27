@@ -148,7 +148,7 @@ func NewClient(addr string) (*Client, error) {
 	}
 
 	client := pb.NewEchoServiceClient(conn)
-	stream, err := client.EchoStream(context.Background())
+	stream, err := client.EchoStream(context.Background(), grpc.UseCompressor("gzip"))
 	if err != nil {
 		return nil, err
 	}
