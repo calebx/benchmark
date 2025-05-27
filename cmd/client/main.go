@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -15,6 +14,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	pb "nothing.com/benchmark/proto/echo"
 )
+
+const enclaveAddr = "127.0.0.1:5005"
 
 type JsonIterSerializer struct{}
 
@@ -40,13 +41,13 @@ type Resp struct {
 }
 
 func main() {
-	e := echo.New()
-	e.JSONSerializer = &JsonIterSerializer{}
-
-	pool, err := NewClientPool("127.0.0.1:5005", 16)
+	pool, err := NewClientPool(enclaveAddr, 16)
 	if err != nil {
 		log.Fatalf("failed to create client pool: %v", err)
 	}
+
+	e := echo.New()
+	e.JSONSerializer = &JsonIterSerializer{}
 
 	e.POST("/", func(c echo.Context) error {
 		req := &Req{}
@@ -66,16 +67,16 @@ func main() {
 		if err != nil {
 			defer func() {
 				_ = client.stream.CloseSend()
-				client, err = NewClient("127.0.0.1:5005")
+				client, err = NewClient(enclaveAddr)
 				if err != nil {
 					log.Printf("failed to recreate client: %v", err)
 				}
+				// here if it failed to recreate the client,
+				// it will be put back to the pool again,
+				// and trigger a new client creation on the next request by a new try.
 			}()
 
-			log.Printf("stream error: %v", err)
-			if err == io.EOF {
-				return c.JSON(http.StatusInternalServerError, &Resp{Code: 500, Message: "Stream closed"})
-			}
+			log.Printf("stream error: %s", err)
 			return c.JSON(http.StatusInternalServerError, &Resp{Code: 500, Message: err.Error()})
 		}
 
@@ -93,10 +94,12 @@ type Client struct {
 }
 
 func (c *Client) Proxy(xid string) (string, error) {
-	err := c.stream.Send(&pb.EchoRequest{Payload: []byte(xid)})
-	if err != nil {
+	if err := c.stream.Send(&pb.EchoRequest{
+		Payload: []byte(xid),
+	}); err != nil {
 		return "", err
 	}
+
 	resp, err := c.stream.Recv()
 	if err != nil {
 		return "", err
@@ -116,18 +119,26 @@ func (p *ClientPool) Put(client *Client) {
 	p.streamCh <- client
 }
 
-func VsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
-	return func(ctx context.Context, addr string) (net.Conn, error) {
-		return net.Dial("tcp", ":5005")
+func NewClientPool(addr string, size int) (*ClientPool, error) {
+	pool := &ClientPool{
+		streamCh: make(chan *Client, size),
 	}
+	for range size {
+		client, err := NewClient(addr)
+		if err != nil {
+			return nil, err
+		}
+		pool.streamCh <- client
+	}
+	return pool, nil
 }
 
 func NewClient(addr string) (*Client, error) {
 	conn, err := grpc.NewClient(addr,
-		grpc.WithContextDialer(VsockDialer(16, 5005)),
+		grpc.WithContextDialer(vsockDialer(16, 5005)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                30 * time.Second,
+			Time:                1 * time.Minute,
 			Timeout:             3 * time.Second,
 			PermitWithoutStream: true,
 		}),
@@ -146,16 +157,8 @@ func NewClient(addr string) (*Client, error) {
 	}, nil
 }
 
-func NewClientPool(addr string, size int) (*ClientPool, error) {
-	pool := &ClientPool{
-		streamCh: make(chan *Client, size),
+func vsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
+	return func(ctx context.Context, addr string) (net.Conn, error) {
+		return net.Dial("tcp", ":5005")
 	}
-	for i := 0; i < size; i++ {
-		client, err := NewClient(addr)
-		if err != nil {
-			return nil, err
-		}
-		pool.streamCh <- client
-	}
-	return pool, nil
 }

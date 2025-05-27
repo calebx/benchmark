@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"log"
-	"net"
 	"time"
 
+	"github.com/mdlayher/vsock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	pb "nothing.com/benchmark/proto/echo"
@@ -32,26 +32,26 @@ func (s *echoServer) EchoStream(stream pb.EchoService_EchoStreamServer) error {
 }
 
 func main() {
-	lis, err := net.Listen("tcp", ":5005")
-	if err != nil {
-		log.Fatalf("failed to listen vsock: %v", err)
-	}
 	grpcServer := grpc.NewServer(
 		grpc.KeepaliveParams(keepalive.ServerParameters{
-			// MaxConnectionIdle:     30 * time.Second,
-			// MaxConnectionAge:      60 * time.Second,
-			// MaxConnectionAgeGrace: 5 * time.Second,
-			Time:    5 * time.Second,
-			Timeout: 1 * time.Second,
+			Time:    10 * time.Second,
+			Timeout: 3 * time.Second,
 		}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             15 * time.Second,
+			MinTime:             30 * time.Second,
 			PermitWithoutStream: true,
 		}),
 	)
 	pb.RegisterEchoServiceServer(grpcServer, &echoServer{})
+	log.Println("Echo gRPC registered")
 
-	log.Println("Echo gRPC server listening on :5005")
+	lis, err := vsock.Listen(5005, nil)
+	if err != nil {
+		log.Fatalf("failed to listen vsock: %v", err)
+	}
+	log.Println("Create VSOCK listener on port :5005")
+
+	log.Println("Echo gRPC server start listening on :5005")
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
