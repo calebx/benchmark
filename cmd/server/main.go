@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"time"
 
-	"github.com/mdlayher/vsock"
 	"google.golang.org/grpc"
+	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/keepalive"
 	pb "nothing.com/benchmark/proto/echo"
 )
@@ -45,7 +46,8 @@ func main() {
 	pb.RegisterEchoServiceServer(grpcServer, &echoServer{})
 	log.Println("Echo gRPC registered")
 
-	lis, err := vsock.Listen(5005, nil)
+	// lis, err := vsock.Listen(5005, nil)
+	lis, err := net.Listen("tcp", ":5005")
 	if err != nil {
 		log.Fatalf("failed to listen vsock: %v", err)
 	}
