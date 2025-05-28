@@ -46,7 +46,7 @@ func main() {
 		Port:           5005,
 		Origin:         "http://127.0.0.1:5005",
 		CliCount:       4,
-		MaxConnsPerCli: 8,
+		MaxConnsPerCli: 16,
 		Timeout:        3 * time.Second,
 	}
 	vsockcli.MustInit(cfg)
