@@ -26,14 +26,14 @@ func main() {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, Resp{
 				Code:    400,
-				Message: "Bad Request",
+				Message: "Bad Request 6",
 			})
 			return
 		}
 
 		xid := req.XID
-		if len(xid) > 32 {
-			xid = xid[:32]
+		if len(xid) > 64 {
+			xid = xid[:64]
 		}
 
 		c.JSON(http.StatusOK, Resp{
@@ -42,7 +42,7 @@ func main() {
 		})
 	})
 
-	r.Run(":5005")
+	_ = r.Run(":5005")
 }
 
 func reverse(s string) string {

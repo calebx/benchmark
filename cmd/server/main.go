@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/keepalive"
+
 	pb "nothing.com/benchmark/proto/echo"
 )
 
