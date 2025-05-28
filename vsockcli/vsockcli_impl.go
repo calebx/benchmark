@@ -16,9 +16,8 @@ import (
 
 type enclaveClient struct {
 	Config       *Config
-	clientsCnt   int
-	clientsCntCh chan int
 	clients      []*http.Client
+	clientsIdxCh chan int
 }
 
 func newEnclaveClient(cfg *Config) (VsockCli, error) {
@@ -29,16 +28,15 @@ func newEnclaveClient(cfg *Config) (VsockCli, error) {
 		clients = append(clients, newHttpClient(cfg))
 	}
 
-	clientsCntCh := make(chan int, cfg.CliCount*cfg.MaxConnsPerCli)
-	for i := range len(clients) {
-		clientsCntCh <- i % cfg.CliCount
+	clientsIdxCh := make(chan int, cfg.CliCount*cfg.MaxConnsPerCli)
+	for i := range cfg.CliCount * cfg.MaxConnsPerCli {
+		clientsIdxCh <- i % cfg.CliCount
 	}
 
 	return &enclaveClient{
 		Config:       cfg,
-		clientsCnt:   cfg.CliCount,
-		clientsCntCh: clientsCntCh,
 		clients:      clients,
+		clientsIdxCh: clientsIdxCh,
 	}, nil
 }
 
@@ -73,12 +71,12 @@ func newHttpClient(cfg *Config) *http.Client {
 }
 
 func (e *enclaveClient) Get(ctx context.Context, fullPath string) (buf []byte, err error) {
-	i := <-e.clientsCntCh
+	i := <-e.clientsIdxCh
 	defer func() {
 		if err != nil {
 			e.clients[i] = newHttpClient(e.Config)
 		}
-		e.clientsCntCh <- i
+		e.clientsIdxCh <- i
 	}()
 	client := e.clients[i]
 
@@ -101,12 +99,12 @@ func (e *enclaveClient) Get(ctx context.Context, fullPath string) (buf []byte, e
 }
 
 func (e *enclaveClient) Post(ctx context.Context, fullPath string, payload interface{}) (buf []byte, err error) {
-	i := <-e.clientsCntCh
+	i := <-e.clientsIdxCh
 	defer func() {
 		if err != nil {
 			e.clients[i] = newHttpClient(e.Config)
 		}
-		e.clientsCntCh <- i
+		e.clientsIdxCh <- i
 	}()
 	client := e.clients[i]
 

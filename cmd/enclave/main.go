@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +27,7 @@ func main() {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, Resp{
 				Code:    400,
-				Message: "Bad Request 6",
+				Message: "Bad Request 7",
 			})
 			return
 		}
@@ -36,6 +37,7 @@ func main() {
 			xid = xid[:64]
 		}
 
+		time.Sleep(time.Millisecond)
 		c.JSON(http.StatusOK, Resp{
 			Code:    200,
 			Message: reverse(xid),
