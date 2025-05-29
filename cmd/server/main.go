@@ -27,6 +27,7 @@ func (s *echoServer) EchoStream(stream pb.EchoService_EchoStreamServer) error {
 		if err != nil {
 			return err
 		}
+		time.Sleep(time.Millisecond)
 		if err := stream.Send(&pb.EchoResponse{Payload: req.Payload[:32]}); err != nil {
 			return err
 		}
@@ -40,7 +41,7 @@ func main() {
 			Timeout: 3 * time.Second,
 		}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             30 * time.Second,
+			MinTime:             time.Minute,
 			PermitWithoutStream: true,
 		}),
 	)

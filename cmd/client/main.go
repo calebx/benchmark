@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/keepalive"
+
 	pb "nothing.com/benchmark/proto/echo"
 )
 
@@ -43,7 +44,7 @@ type Resp struct {
 }
 
 func main() {
-	pool, err := NewClientPool(enclaveAddr, 16)
+	pool, err := NewClientPool(enclaveAddr, 32)
 	if err != nil {
 		log.Fatalf("failed to create client pool: %v", err)
 	}
