@@ -10,6 +10,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
+	"github.com/mdlayher/vsock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	_ "google.golang.org/grpc/encoding/gzip"
@@ -168,7 +169,7 @@ func NewClient(addr string) (*Client, error) {
 
 func vsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
 	return func(ctx context.Context, addr string) (net.Conn, error) {
-		return net.Dial("tcp", addr)
-		// return vsock.Dial(cid, port, nil)
+		// return net.Dial("tcp", addr)
+		return vsock.Dial(cid, port, nil)
 	}
 }
