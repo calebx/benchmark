@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"time"
 
-	"github.com/mdlayher/vsock"
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/keepalive"
@@ -28,7 +28,11 @@ func (s *echoServer) EchoStream(stream pb.EchoService_EchoStreamServer) error {
 			return err
 		}
 		time.Sleep(time.Millisecond)
-		if err := stream.Send(&pb.EchoResponse{Payload: req.Payload[:32]}); err != nil {
+		payload := req.Payload
+		if len(payload) > 32 {
+			payload = payload[:32]
+		}
+		if err := stream.Send(&pb.EchoResponse{Payload: payload}); err != nil {
 			return err
 		}
 	}
@@ -48,7 +52,8 @@ func main() {
 	pb.RegisterEchoServiceServer(grpcServer, &echoServer{})
 	log.Println("Echo gRPC registered")
 
-	lis, err := vsock.Listen(5005, nil)
+	lis, err := net.Listen("tcp", ":5005")
+	// lis, err := vsock.Listen(5005, nil)
 	if err != nil {
 		log.Fatalf("failed to listen vsock: %v", err)
 	}

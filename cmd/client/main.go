@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
-	"github.com/mdlayher/vsock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	_ "google.golang.org/grpc/encoding/gzip"
@@ -19,6 +19,9 @@ import (
 )
 
 const enclaveAddr = "127.0.0.1:5005"
+
+var flagCID = flag.Uint("cid", 16, "CID of the enclave, default is 2")
+var CID = uint32(0)
 
 type JsonIterSerializer struct{}
 
@@ -44,6 +47,9 @@ type Resp struct {
 }
 
 func main() {
+	flag.Parse()
+	CID = uint32(*flagCID)
+
 	pool, err := NewClientPool(enclaveAddr, 32)
 	if err != nil {
 		log.Fatalf("failed to create client pool: %v", err)
@@ -52,7 +58,7 @@ func main() {
 	e := echo.New()
 	e.JSONSerializer = &JsonIterSerializer{}
 
-	e.POST("/", func(c echo.Context) error {
+	e.POST("/echo", func(c echo.Context) error {
 		req := &Req{}
 		if err := c.Bind(req); err != nil {
 			return c.JSON(http.StatusBadRequest, &Resp{
@@ -138,7 +144,7 @@ func NewClientPool(addr string, size int) (*ClientPool, error) {
 
 func NewClient(addr string) (*Client, error) {
 	conn, err := grpc.NewClient(addr,
-		grpc.WithContextDialer(vsockDialer(16, 5005)),
+		grpc.WithContextDialer(vsockDialer(CID, 5005)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                1 * time.Minute,
@@ -151,7 +157,7 @@ func NewClient(addr string) (*Client, error) {
 	}
 
 	client := pb.NewEchoServiceClient(conn)
-	stream, err := client.EchoStream(context.Background(), grpc.UseCompressor("gzip"))
+	stream, err := client.EchoStream(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +168,7 @@ func NewClient(addr string) (*Client, error) {
 
 func vsockDialer(cid uint32, port uint32) func(context.Context, string) (net.Conn, error) {
 	return func(ctx context.Context, addr string) (net.Conn, error) {
-		return vsock.Dial(16, 5005, nil)
+		return net.Dial("tcp", addr)
+		// return vsock.Dial(cid, port, nil)
 	}
 }
