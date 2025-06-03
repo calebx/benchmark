@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math/rand"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/mdlayher/vsock"
@@ -26,21 +28,22 @@ type Client interface {
 	Close()
 }
 
-func NewClient(ctx context.Context, cid uint32, port uint32, addr string, isDev bool, size int) (Client, error) {
+func NewClient(ctx context.Context, cid uint32, port uint32, addr string, isVsock bool, size int) (Client, error) {
 	pool := &clientPool{
 		CID:      cid,
 		Port:     port,
 		Addr:     addr,
-		IsDev:    isDev,
+		IsVsock:  isVsock,
 		closed:   make(chan bool),
 		streamCh: make(chan *client, size),
 	}
 	for range size {
-		cli, err := newClient(ctx, cid, port, addr, isDev)
+		cli, err := newClient(ctx, cid, port, addr, isVsock)
 		if err != nil {
 			return nil, err
 		}
 		pool.streamCh <- cli
+		pool.streamSl = append(pool.streamSl, cli)
 	}
 	return pool, nil
 }
@@ -49,9 +52,10 @@ type clientPool struct {
 	CID      uint32
 	Port     uint32
 	Addr     string
-	IsDev    bool
+	IsVsock  bool
 	closed   chan bool
 	streamCh chan *client
+	streamSl []*client
 }
 
 func (cp *clientPool) Invoke(ctx context.Context, cmd string, payload []byte) (resp *Response, err error) {
@@ -60,7 +64,23 @@ func (cp *clientPool) Invoke(ctx context.Context, cmd string, payload []byte) (r
 		cp.put(cli)
 	}()
 
-	resp, err = cli.Invoke(ctx, cmd, payload)
+	batch, i, done, err := cli.Invoke(ctx, cmd, payload)
+	if batch == nil || done == nil {
+		return nil, errors.New("invoke err")
+	}
+	_ = <-done
+
+	responses := batch.GetResponse()
+	if len(responses) <= i {
+		return nil, errors.New("response too short")
+	}
+
+	respPb := responses[i]
+	resp = &Response{
+		Code:    respPb.GetCode(),
+		Message: respPb.GetMessage(),
+		Payload: respPb.GetPayload(),
+	}
 	if err != nil {
 		defer func() {
 			select {
@@ -75,7 +95,7 @@ func (cp *clientPool) Invoke(ctx context.Context, cmd string, payload []byte) (r
 				_ = cli.stream.CloseSend()
 				newCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				cli, err = newClient(newCtx, cp.CID, cp.Port, cp.Addr, cp.IsDev)
+				cli, err = newClient(newCtx, cp.CID, cp.Port, cp.Addr, cp.IsVsock)
 				if err != nil {
 					log.Printf("recreate client failed: %v", err)
 				}
@@ -106,17 +126,19 @@ func (cp *clientPool) Close() {
 }
 
 func (cp *clientPool) get() *client {
-	return <-cp.streamCh
+	i := rand.Intn(len(cp.streamSl))
+	return cp.streamSl[i]
+	// return <-cp.streamCh
 }
 
 func (cp *clientPool) put(client *client) {
-	cp.streamCh <- client
+	// cp.streamCh <- client
 }
 
-func newClient(ctx context.Context, cid uint32, port uint32, addr string, isDev bool) (*client, error) {
-	dialer := vsockDialer(cid, port)
-	if isDev {
-		dialer = netDialer(addr)
+func newClient(ctx context.Context, cid uint32, port uint32, addr string, isVsock bool) (*client, error) {
+	dialer := netDialer(addr)
+	if isVsock {
+		dialer = vsockDialer(cid, port)
 	}
 	conn, err := grpc.NewClient(
 		addr,
@@ -137,36 +159,98 @@ func newClient(ctx context.Context, cid uint32, port uint32, addr string, isDev 
 	if err != nil {
 		return nil, err
 	}
-	return &client{
+	c := &client{
 		stream: stream,
-	}, nil
+	}
+	c.reset()
+	return c, nil
 }
 
 type client struct {
+	sync.Mutex
 	stream pb.Vrpc_DoClient
+
+	todos [][]byte
+	after <-chan time.Time
+	ready chan bool
+	once  *sync.Once
+	respx *RespX
 }
 
-func (c *client) Invoke(ctx context.Context, cmd string, payload []byte) (resp *Response, err error) {
+type RespX struct {
+	pb     *pb.BatchResp
+	doneCh chan bool
+}
+
+func (c *client) reset() {
+	c.todos = nil
+	c.after = time.After(5 * time.Millisecond)
+	c.ready = make(chan bool, 1)
+
+	after := c.after
+	ready := c.ready
+	go func() {
+		<-after
+		ready <- true
+	}()
+
+	c.once = new(sync.Once)
+	c.respx = &RespX{
+		pb:     &pb.BatchResp{},
+		doneCh: make(chan bool),
+	}
+}
+
+func (c *client) Invoke(ctx context.Context, cmd string, payload []byte) (batch *pb.BatchResp, i int, isDone chan bool, err error) {
+	c.Lock()
+	defer c.Unlock()
+
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, -1, nil, ctx.Err()
 	default:
-		if err := c.stream.Send(&pb.Request{
-			Command: cmd,
-			Payload: payload,
-		}); err != nil {
-			return nil, err
+		ready := c.ready
+
+		c.todos = append(c.todos, payload)
+		if len(c.todos) > 10 {
+			ready <- true
 		}
 
-		respPb, err := c.stream.Recv()
-		if err != nil {
-			return nil, err
-		}
-		return &Response{
-			Code:    respPb.GetCode(),
-			Message: respPb.GetMessage(),
-			Payload: respPb.GetPayload(),
-		}, nil
+		i := len(c.todos) - 1
+		respPb := c.respx.pb
+		doneCh := c.respx.doneCh
+		once := c.once
+		go func() {
+			once.Do(func() {
+				defer func() {
+					close(doneCh)
+					c.reset()
+				}()
+
+				<-ready
+				batchReq := &pb.BatchReq{
+					Requests: []*pb.Request{},
+				}
+				for _, todo := range c.todos {
+					batchReq.Requests = append(batchReq.Requests, &pb.Request{
+						Command: cmd,
+						Payload: todo,
+					})
+				}
+				if err := c.stream.Send(batchReq); err != nil {
+					log.Printf("send error: %v", err)
+					return
+				}
+				batchPb, err := c.stream.Recv()
+				if err != nil {
+					log.Printf("recv error: %v", err)
+					return
+				}
+				respPb.Response = batchPb.GetResponse()
+			})
+		}()
+
+		return respPb, i, doneCh, nil
 	}
 }
 

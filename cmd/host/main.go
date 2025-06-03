@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	log "github.com/sirupsen/logrus"
 	_ "google.golang.org/grpc/encoding/gzip"
 
@@ -46,10 +48,9 @@ func MustInit() {
 	cid := uint32(16)
 	port := uint32(50001)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	isVsock := true
-	cliCount := 16
+	cliCount := 8
 
-	client, err := vrpc.NewClient(ctx, cid, port, addr, isVsock, cliCount)
+	client, err := vrpc.NewClient(ctx, cid, port, addr, false, cliCount)
 	if err != nil {
 		log.Panic("initialize vsock rpc client failed", err)
 	}
@@ -65,6 +66,9 @@ func main() {
 	e.JSONSerializer = &JsonIterSerializer{}
 
 	MustInit()
+	e.Use(middleware.TimeoutWithConfig(middleware.TimeoutConfig{
+		Timeout: 60 * time.Second,
+	}))
 
 	e.POST("/echo", func(c echo.Context) error {
 		req := &Req{}

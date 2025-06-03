@@ -30,7 +30,7 @@ func main() {
 		}, nil
 	})
 
-	server := vrpc.NewServer(uint32(port), dp, true)
+	server := vrpc.NewServer(uint32(port), dp, false)
 	server.Start()
 }
 

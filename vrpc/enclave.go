@@ -77,14 +77,18 @@ func (s *server) Do(stream pb.Vrpc_DoServer) error {
 			return err
 		}
 
-		log.WithField("cmd", req.GetCommand()).Info("do_req")
-		code, message, payload := s.Dispatcher.Dispatch(req.GetCommand(), req.GetPayload())
+		resp := &pb.BatchResp{}
+		log.WithField("len", len(req.Requests)).Info("do_req")
+		for _, r := range req.GetRequests() {
+			code, message, payload := s.Dispatcher.Dispatch(r.GetCommand(), r.GetPayload())
+			resp.Response = append(resp.Response, &pb.Response{
+				Code:    code,
+				Message: message,
+				Payload: payload,
+			})
+		}
 
-		if err = stream.Send(&pb.Response{
-			Code:    code,
-			Message: message,
-			Payload: payload,
-		}); err != nil {
+		if err = stream.Send(resp); err != nil {
 			return err
 		}
 	}

@@ -26,7 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type VrpcClient interface {
-	Do(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[Request, Response], error)
+	Do(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[BatchReq, BatchResp], error)
 }
 
 type vrpcClient struct {
@@ -37,24 +37,24 @@ func NewVrpcClient(cc grpc.ClientConnInterface) VrpcClient {
 	return &vrpcClient{cc}
 }
 
-func (c *vrpcClient) Do(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[Request, Response], error) {
+func (c *vrpcClient) Do(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[BatchReq, BatchResp], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Vrpc_ServiceDesc.Streams[0], Vrpc_Do_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[Request, Response]{ClientStream: stream}
+	x := &grpc.GenericClientStream[BatchReq, BatchResp]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Vrpc_DoClient = grpc.BidiStreamingClient[Request, Response]
+type Vrpc_DoClient = grpc.BidiStreamingClient[BatchReq, BatchResp]
 
 // VrpcServer is the server API for Vrpc service.
 // All implementations must embed UnimplementedVrpcServer
 // for forward compatibility.
 type VrpcServer interface {
-	Do(grpc.BidiStreamingServer[Request, Response]) error
+	Do(grpc.BidiStreamingServer[BatchReq, BatchResp]) error
 	mustEmbedUnimplementedVrpcServer()
 }
 
@@ -65,7 +65,7 @@ type VrpcServer interface {
 // pointer dereference when methods are called.
 type UnimplementedVrpcServer struct{}
 
-func (UnimplementedVrpcServer) Do(grpc.BidiStreamingServer[Request, Response]) error {
+func (UnimplementedVrpcServer) Do(grpc.BidiStreamingServer[BatchReq, BatchResp]) error {
 	return status.Errorf(codes.Unimplemented, "method Do not implemented")
 }
 func (UnimplementedVrpcServer) mustEmbedUnimplementedVrpcServer() {}
@@ -90,11 +90,11 @@ func RegisterVrpcServer(s grpc.ServiceRegistrar, srv VrpcServer) {
 }
 
 func _Vrpc_Do_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(VrpcServer).Do(&grpc.GenericServerStream[Request, Response]{ServerStream: stream})
+	return srv.(VrpcServer).Do(&grpc.GenericServerStream[BatchReq, BatchResp]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Vrpc_DoServer = grpc.BidiStreamingServer[Request, Response]
+type Vrpc_DoServer = grpc.BidiStreamingServer[BatchReq, BatchResp]
 
 // Vrpc_ServiceDesc is the grpc.ServiceDesc for Vrpc service.
 // It's only intended for direct use with grpc.RegisterService,
