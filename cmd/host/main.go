@@ -47,7 +47,7 @@ func MustInit() {
 	port := uint32(50001)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	isVsock := true
-	cliCount := 8
+	cliCount := 16
 
 	client, err := vrpc.NewClient(ctx, cid, port, addr, isVsock, cliCount)
 	if err != nil {

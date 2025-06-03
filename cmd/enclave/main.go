@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 
 	"nothing.com/benchmark/vrpc"
 )
@@ -26,7 +25,6 @@ func main() {
 			xid = xid[:64]
 		}
 
-		time.Sleep(time.Millisecond)
 		return &Resp{
 			DIX: reverse(xid),
 		}, nil
