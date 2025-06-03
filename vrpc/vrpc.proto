@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = "./gen;vrpc";
+
+service Vrpc { rpc Do(stream Request) returns (stream Response); }
+
+message Request {
+  string command = 1;
+  bytes  payload = 2;
+}
+
+message Response {
+  uint32 code    = 1;
+  string message = 2;
+  bytes  payload = 3;
+}

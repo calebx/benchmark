@@ -1,0 +1,9 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 2
+ColumnLimit: 80
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+BinPackArguments: false
+BinPackParameters: false
+ReflowComments: true

@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
-	"time"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
+	log "github.com/sirupsen/logrus"
 	_ "google.golang.org/grpc/encoding/gzip"
 
-	"nothing.com/benchmark/vsockcli"
+	"nothing.com/benchmark/vrpc"
 )
 
 const enclaveAddr = "127.0.0.1:5005"
@@ -32,48 +35,75 @@ type Req struct {
 }
 
 type Resp struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	DIX string `json:"dix"`
+}
+
+var globalCli vrpc.Client
+
+func MustInit() {
+	ctx := context.Background()
+
+	cid := uint32(16)
+	port := uint32(50001)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	isDev := true
+	cliCount := 8
+
+	client, err := vrpc.NewClient(ctx, cid, port, addr, isDev, cliCount)
+	if err != nil {
+		log.Panic("initialize vsock rpc client failed", err)
+	}
+	globalCli = client
+}
+
+func Get() vrpc.Client {
+	return globalCli
 }
 
 func main() {
 	e := echo.New()
 	e.JSONSerializer = &JsonIterSerializer{}
 
-	cfg := &vsockcli.Config{
-		IsMocked:       true,
-		CID:            16,
-		Port:           5005,
-		Origin:         "http://127.0.0.1:5005",
-		CliCount:       4,
-		MaxConnsPerCli: 16,
-		Timeout:        3 * time.Second,
-	}
-	vsockcli.MustInit(cfg)
-	cli := vsockcli.Get()
+	MustInit()
 
 	e.POST("/echo", func(c echo.Context) error {
 		req := &Req{}
 		if err := c.Bind(req); err != nil {
 			return c.JSON(http.StatusBadRequest, &Resp{
-				Code:    400,
-				Message: "Bad Request 5",
+				DIX: "bad",
 			})
 		}
 
 		ctx := c.Request().Context()
-		buf, err := cli.Post(ctx, "/echo", req)
+		resp, err := Invoke[Resp](ctx, "/echo", req)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, &Resp{
-				Code:    500,
-				Message: err.Error(),
+			return c.JSON(http.StatusBadRequest, &Resp{
+				DIX: "bad",
 			})
 		}
-		return c.JSON(http.StatusOK, &Resp{
-			Code:    200,
-			Message: string(buf),
-		})
+		return c.JSON(http.StatusOK, resp)
 	})
 
 	e.Logger.Fatal(e.Start(":1323"))
+}
+
+func Invoke[T any](ctx context.Context, url string, req any) (resp *T, err error) {
+	buf, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	rpcResp, err := Get().Invoke(ctx, url, buf)
+	if err != nil {
+		return nil, err
+	}
+	if rpcResp.Code != 0 {
+		return nil, err
+	}
+
+	resp = new(T)
+	if err = json.Unmarshal(rpcResp.Payload, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
