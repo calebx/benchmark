@@ -19,7 +19,7 @@ math.randomseed(os.time())
 
 -- Called before each request
 request = function()
-  local xid = randomXID(200)
+  local xid = randomXID(32)
   local body = string.format('{"xid":"%s"}', xid)
   return wrk.format(nil, nil, nil, body)
 end

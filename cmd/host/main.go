@@ -48,7 +48,7 @@ func MustInit() {
 	cid := uint32(16)
 	port := uint32(50001)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cliCount := 8
+	cliCount := 10
 
 	client, err := vrpc.NewClient(ctx, cid, port, addr, false, cliCount)
 	if err != nil {
@@ -67,7 +67,7 @@ func main() {
 
 	MustInit()
 	e.Use(middleware.TimeoutWithConfig(middleware.TimeoutConfig{
-		Timeout: 60 * time.Second,
+		Timeout: 1 * time.Second,
 	}))
 
 	e.POST("/echo", func(c echo.Context) error {
@@ -81,6 +81,7 @@ func main() {
 		ctx := c.Request().Context()
 		resp, err := Invoke[Resp](ctx, "/echo", req)
 		if err != nil {
+			log.Println(err)
 			return c.JSON(http.StatusBadRequest, &Resp{
 				DIX: "bad",
 			})

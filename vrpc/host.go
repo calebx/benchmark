@@ -3,6 +3,7 @@ package vrpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -72,7 +73,7 @@ func (cp *clientPool) Invoke(ctx context.Context, cmd string, payload []byte) (r
 
 	responses := batch.GetResponse()
 	if len(responses) <= i {
-		return nil, errors.New("response too short")
+		return nil, fmt.Errorf("response too short %d, %s, %d", len(responses), "expected index", i)
 	}
 
 	respPb := responses[i]
@@ -183,22 +184,28 @@ type RespX struct {
 }
 
 func (c *client) reset() {
-	c.todos = nil
-	c.after = time.After(5 * time.Millisecond)
-	c.ready = make(chan bool, 1)
+	todos := [][]byte{}
+	after := time.After(5 * time.Millisecond)
+	ready := make(chan bool, 1)
+	once := &sync.Once{}
+	respX := &RespX{
+		pb:     &pb.BatchResp{},
+		doneCh: make(chan bool),
+	}
 
-	after := c.after
-	ready := c.ready
 	go func() {
 		<-after
 		ready <- true
 	}()
 
-	c.once = new(sync.Once)
-	c.respx = &RespX{
-		pb:     &pb.BatchResp{},
-		doneCh: make(chan bool),
-	}
+	// c.Lock()
+	// defer c.Unlock()
+
+	c.todos = todos
+	c.after = after
+	c.ready = ready
+	c.once = once
+	c.respx = respX
 }
 
 func (c *client) Invoke(ctx context.Context, cmd string, payload []byte) (batch *pb.BatchResp, i int, isDone chan bool, err error) {
@@ -210,24 +217,64 @@ func (c *client) Invoke(ctx context.Context, cmd string, payload []byte) (batch 
 		return nil, -1, nil, ctx.Err()
 	default:
 		ready := c.ready
-
 		c.todos = append(c.todos, payload)
-		if len(c.todos) > 10 {
-			ready <- true
+		if len(c.todos) > 16 {
+			select {
+			case ready <- true:
+				// about to fire
+			default:
+				// ok to go still
+			}
 		}
 
 		i := len(c.todos) - 1
 		respPb := c.respx.pb
 		doneCh := c.respx.doneCh
 		once := c.once
+		// select {
+		// case <-ready:
+		// 	// log.Printf("start to send batch request")
+		// 	defer func() {
+		// 		close(doneCh)
+		// 		c.reset()
+		// 	}()
+		//
+		// 	batchReq := &pb.BatchReq{
+		// 		Requests: []*pb.Request{},
+		// 	}
+		// 	for _, todo := range c.todos {
+		// 		batchReq.Requests = append(batchReq.Requests, &pb.Request{
+		// 			Command: cmd,
+		// 			Payload: todo,
+		// 		})
+		// 	}
+		// 	if err := c.stream.Send(batchReq); err != nil {
+		// 		log.Printf("send error: %v", err)
+		// 		return nil, -1, nil, ctx.Err()
+		// 	}
+		// 	batchPb, err := c.stream.Recv()
+		// 	if err != nil {
+		// 		log.Printf("recv error: %v", err)
+		// 		return nil, -1, nil, ctx.Err()
+		// 	}
+		// 	respPb.Response = batchPb.GetResponse()
+		// default:
+		// 	// nothing
+		// }
+
 		go func() {
 			once.Do(func() {
+				<-ready
+
+				c.Lock()
+				defer c.Unlock()
+
+				// log.Printf("start to send batch request")
 				defer func() {
 					close(doneCh)
 					c.reset()
 				}()
 
-				<-ready
 				batchReq := &pb.BatchReq{
 					Requests: []*pb.Request{},
 				}
