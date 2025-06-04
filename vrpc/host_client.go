@@ -73,9 +73,7 @@ func (c *client) reset() {
 		one.ready <- struct{}{}
 	}()
 
-	c.Lock()
 	c.batch = one
-	c.Unlock()
 }
 
 func (c *client) invoke(ctx context.Context, cmd string, payload []byte) (batchResp *pb.BatchResp, idx int, doneCh chan struct{}, err error) {

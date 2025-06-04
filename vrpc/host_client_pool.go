@@ -36,13 +36,13 @@ func (cp *clientPool) Invoke(ctx context.Context, cmd string, payload []byte) (r
 		log.WithError(err).WithField("cmd", cmd).Error("invoke cmd failed")
 		select {
 		case <-cp.closed:
-			log.Printf("client pool is closed")
+			log.Errorf("client pool is closed")
 		default:
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 				return
 			}
 
-			log.Printf("recreating client due to error: %v", err)
+			log.Errorf("recreating client due to error: %v", err)
 			_ = cli.stream.CloseSend()
 			newCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

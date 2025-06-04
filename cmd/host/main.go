@@ -19,7 +19,7 @@ import (
 const (
 	cid      = 16
 	port     = 50001
-	cliCount = 16
+	cliCount = 8
 	isVsock  = false
 )
 
@@ -87,7 +87,7 @@ func main() {
 				DIX: "bad",
 			})
 		}
-		
+
 		return c.JSON(http.StatusOK, resp)
 	})
 
