@@ -4,4 +4,5 @@
 # go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 # go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
-protoc --go_out=. --go-grpc_out=. vrpc.proto
+clang-format -i ./vrpc.proto
+protoc --go_out=. --go-grpc_out=. ./vrpc.proto

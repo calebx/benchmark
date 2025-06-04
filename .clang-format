@@ -1,0 +1,11 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 2
+ColumnLimit: 120
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+BinPackArguments: false
+BinPackParameters: false
+ReflowComments: true
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None

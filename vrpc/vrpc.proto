@@ -2,14 +2,27 @@ syntax = "proto3";
 
 option go_package = "./gen;vrpc";
 
-service Vrpc { rpc Do(stream BatchReq) returns (stream BatchResp); }
+service Vrpc {
+  rpc Do(stream BatchReq) returns (stream BatchResp);
+}
+
+message ReqMeta {
+  optional string req_id = 1;
+}
+
+message RespMeta {
+  uint32 code    = 1;
+  string message = 2;
+}
 
 message BatchReq {
-  repeated Request requests = 1;
+  optional ReqMeta meta     = 1;
+  repeated Request requests = 2;
 }
 
 message BatchResp {
-  repeated Response response = 1;
+  optional RespMeta meta      = 1;
+  repeated Response responses = 2;
 }
 
 message Request {

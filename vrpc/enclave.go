@@ -78,10 +78,21 @@ func (s *server) Do(stream pb.Vrpc_DoServer) error {
 		}
 
 		resp := &pb.BatchResp{}
-		log.WithField("len", len(req.Requests)).Info("do_req")
+		var first []byte
+		if len(req.GetRequests()) == 0 {
+			log.Warn("received empty request batch")
+		} else {
+			first = req.GetRequests()[0].Payload
+		}
+
+		log.WithFields(log.Fields{
+			"len":   len(req.Requests),
+			"first": string(first),
+		}).Info("do_req")
+
 		for _, r := range req.GetRequests() {
 			code, message, payload := s.Dispatcher.Dispatch(r.GetCommand(), r.GetPayload())
-			resp.Response = append(resp.Response, &pb.Response{
+			resp.Responses = append(resp.Responses, &pb.Response{
 				Code:    code,
 				Message: message,
 				Payload: payload,

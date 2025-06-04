@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -12,22 +13,24 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type Dispatcher interface {
 	Dispatch(cmd string, request []byte) (uint32, string, []byte)
-	Register(cmd string, handler interface{})
+	Register(cmd string, handler any)
 }
 
-func NewDispatcher(defaultErrCode uint32) Dispatcher {
+func NewDispatcher(defaultErrCode uint32, defaultTimout time.Duration) Dispatcher {
 	return &dispatcher{
 		cmdToFunc: make(map[string]any),
 		errCode:   defaultErrCode,
+		timeout:   defaultTimout,
 	}
 }
 
 type dispatcher struct {
 	cmdToFunc map[string]any
 	errCode   uint32
+	timeout   time.Duration
 }
 
-func (d *dispatcher) Register(cmd string, handler interface{}) {
+func (d *dispatcher) Register(cmd string, handler any) {
 	// simple validate handler
 	if handler == nil {
 		panic("handler cannot be nil")
@@ -65,18 +68,20 @@ func (d *dispatcher) Register(cmd string, handler interface{}) {
 }
 
 func (d *dispatcher) Dispatch(command string, payload []byte) (code uint32, message string, responsePayload []byte) {
-	handler, exists := d.cmdToFunc[command]
-	if !exists {
+	handler, ok := d.cmdToFunc[command]
+	if !ok {
 		return d.errCode, fmt.Sprintf("command [%s] not found", command), nil
 	}
 
 	// TODO: involve context from request
-	ctx := context.TODO()
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+
 	args := []any{ctx}
 
 	arg, keep, err := d.parseArg(handler, payload)
 	if err != nil {
-		return d.errCode, fmt.Sprintf("failed to parse request: %v", err), nil
+		return d.errCode, fmt.Sprintf("parse request err: %v", err), nil
 	}
 	if keep {
 		args = append(args, arg)
@@ -84,14 +89,14 @@ func (d *dispatcher) Dispatch(command string, payload []byte) (code uint32, mess
 
 	results := d.callFunc(handler, args...)
 	if len(results) == 0 {
-		return d.errCode, "handler returned no results", nil
+		return d.errCode, "handler has no results", nil
 	}
 
 	// last result should be error
 	lastResult := results[len(results)-1]
 	if lastResult != nil {
 		if err, ok := lastResult.(error); ok && err != nil {
-			return uint32(10001), fmt.Sprintf("handler error: %v", err), nil
+			return d.errCode, fmt.Sprintf("handler err: %v", err), nil
 		}
 	}
 
@@ -99,23 +104,23 @@ func (d *dispatcher) Dispatch(command string, payload []byte) (code uint32, mess
 	if len(results) > 1 && results[0] != nil {
 		respBuf, err := json.Marshal(results[0])
 		if err != nil {
-			return d.errCode, fmt.Sprintf("failed to marshal response: %v", err), nil
+			return d.errCode, fmt.Sprintf("marshal err: %v", err), nil
 		}
-		return 0, "success", respBuf
+		return 0, "ok", respBuf
 	}
-	return 0, "success", nil
+	return 0, "ok", nil
 }
 
 // parseArg parses the second argument of the function
 // returns the argument value, skip it or not, and any error encountered
-func (d *dispatcher) parseArg(fn interface{}, buf []byte) (interface{}, bool, error) {
+func (d *dispatcher) parseArg(fn any, buf []byte) (any, bool, error) {
 	ft := reflect.TypeOf(fn)
 	if ft.NumIn() <= 1 {
 		return nil, false, nil
 	}
 
 	argType := ft.In(1)
-	var reqArg interface{}
+	var reqArg any
 	if argType.Kind() == reflect.Ptr {
 		reqArg = reflect.New(argType.Elem()).Interface()
 	} else {
@@ -139,7 +144,7 @@ func (d *dispatcher) parseArg(fn interface{}, buf []byte) (interface{}, bool, er
 	return reflect.ValueOf(reqArg).Elem().Interface(), true, nil
 }
 
-func (d *dispatcher) callFunc(fn interface{}, args ...interface{}) []interface{} {
+func (d *dispatcher) callFunc(fn any, args ...any) []any {
 	fv := reflect.ValueOf(fn)
 
 	params := make([]reflect.Value, len(args))
@@ -153,7 +158,7 @@ func (d *dispatcher) callFunc(fn interface{}, args ...interface{}) []interface{}
 	}
 
 	rs := fv.Call(params)
-	result := make([]interface{}, len(rs))
+	result := make([]any, len(rs))
 	for i, r := range rs {
 		result[i] = r.Interface()
 	}

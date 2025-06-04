@@ -22,7 +22,7 @@ func (*mockDispatcher) Register(cmd string, handler interface{}) {
 }
 
 func TestMain(m *testing.M) {
-	s := NewServer(16, 5670, &mockDispatcher{}, true)
+	s := NewServer(5670, &mockDispatcher{}, false)
 
 	go s.Start()
 	defer func() {
@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 
 func TestClient(t *testing.T) {
 	ctx := context.Background()
-	cli, err := NewClient(ctx, 16, 5670, "127.0.0.1:5670", true, 2)
+	cli, err := NewClient(ctx, 16, 5670, "127.0.0.1:5670", false, 2)
 	defer cli.Close()
 
 	assert.NoError(t, err)

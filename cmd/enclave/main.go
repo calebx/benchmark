@@ -2,11 +2,19 @@ package main
 
 import (
 	"context"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"nothing.com/benchmark/vrpc"
 )
 
-const port = 50001
+const (
+	port      = 50001
+	errorCode = 10005
+	timeoutMs = 1000
+	isVsock   = false
+)
 
 type Req struct {
 	XID string `json:"xid"`
@@ -17,8 +25,7 @@ type Resp struct {
 }
 
 func main() {
-	dp := vrpc.NewDispatcher(uint32(10001))
-
+	dp := vrpc.NewDispatcher(uint32(errorCode), timeoutMs*time.Millisecond)
 	dp.Register("/echo", func(ctx context.Context, req *Req) (*Resp, error) {
 		xid := req.XID
 		if len(xid) > 64 {
@@ -30,7 +37,8 @@ func main() {
 		}, nil
 	})
 
-	server := vrpc.NewServer(uint32(port), dp, false)
+	log.Println("start starts", "port:", port, "isVsock:", isVsock)
+	server := vrpc.NewServer(uint32(port), dp, isVsock)
 	server.Start()
 }
 

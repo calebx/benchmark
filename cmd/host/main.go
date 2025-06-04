@@ -16,7 +16,12 @@ import (
 	"nothing.com/benchmark/vrpc"
 )
 
-const enclaveAddr = "127.0.0.1:5005"
+const (
+	cid      = 16
+	port     = 50001
+	cliCount = 16
+	isVsock  = false
+)
 
 type JsonIterSerializer struct{}
 
@@ -42,15 +47,11 @@ type Resp struct {
 
 var globalCli vrpc.Client
 
-func MustInit() {
+func Init() {
 	ctx := context.Background()
 
-	cid := uint32(16)
-	port := uint32(50001)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cliCount := 10
-
-	client, err := vrpc.NewClient(ctx, cid, port, addr, false, cliCount)
+	client, err := vrpc.NewClient(ctx, cid, port, addr, isVsock, cliCount)
 	if err != nil {
 		log.Panic("initialize vsock rpc client failed", err)
 	}
@@ -62,10 +63,10 @@ func Get() vrpc.Client {
 }
 
 func main() {
+	Init()
+
 	e := echo.New()
 	e.JSONSerializer = &JsonIterSerializer{}
-
-	MustInit()
 	e.Use(middleware.TimeoutWithConfig(middleware.TimeoutConfig{
 		Timeout: 1 * time.Second,
 	}))
@@ -81,11 +82,12 @@ func main() {
 		ctx := c.Request().Context()
 		resp, err := Invoke[Resp](ctx, "/echo", req)
 		if err != nil {
-			log.Println(err)
+			log.WithError(err).WithField("cmd", "/echo").Error("invoke api failed")
 			return c.JSON(http.StatusBadRequest, &Resp{
 				DIX: "bad",
 			})
 		}
+		
 		return c.JSON(http.StatusOK, resp)
 	})
 

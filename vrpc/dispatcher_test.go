@@ -26,21 +26,21 @@ type TestPointerRequest struct {
 
 func testHandlerWithRequestResponse(ctx context.Context, req *TestRequest) (*TestResponse, error) {
 	if req == nil {
-		return nil, assert.AnError
+		return nil, errors.New("nil")
 	}
 	if req.Name == "error" {
 		return nil, assert.AnError
 	}
 	return &TestResponse{
 		Message: fmt.Sprintf("Hello %s, age %d", req.Name, req.Age),
-		Status:  "success",
+		Status:  "ok",
 	}, nil
 }
 
 func testHandlerWithPointerRequest(ctx context.Context, req *TestPointerRequest) (*TestResponse, error) {
 	return &TestResponse{
 		Message: fmt.Sprintf("ID: %s, Value: %d", req.ID, req.Value),
-		Status:  "success",
+		Status:  "ok",
 	}, nil
 }
 
@@ -61,7 +61,7 @@ func testHandlerWithResponse(ctx context.Context) (*TestResponse, error) {
 
 func testHandlerWithBool(ctx context.Context, input string) (bool, error) {
 	if len(input) > 10 {
-		return false, assert.AnError
+		return false, fmt.Errorf("input is too long: %d", len(input))
 	}
 	return true, nil
 }
@@ -194,7 +194,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_req_resp",
 			payload:      []byte(`{"name":"John","age":30}`),
 			expectedCode: 0,
-			expectedMsg:  "success",
+			expectedMsg:  "ok",
 			expectResp:   true,
 		},
 		{
@@ -202,7 +202,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_context_only",
 			payload:      nil,
 			expectedCode: 0,
-			expectedMsg:  "success",
+			expectedMsg:  "ok",
 			expectResp:   false,
 		},
 		{
@@ -210,7 +210,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_response_only",
 			payload:      nil,
 			expectedCode: 0,
-			expectedMsg:  "success",
+			expectedMsg:  "ok",
 			expectResp:   true,
 		},
 		{
@@ -218,7 +218,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_req_resp",
 			payload:      []byte(`{"name":"error","age":25}`),
 			expectedCode: 10005, // ErrInternalError code
-			expectedMsg:  "test error",
+			expectedMsg:  "handler err",
 			expectResp:   false,
 		},
 		{
@@ -226,7 +226,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_context_error",
 			payload:      nil,
 			expectedCode: 10005,
-			expectedMsg:  "handler error: context only error",
+			expectedMsg:  "handler err: context only error",
 			expectResp:   false,
 		},
 		{
@@ -242,7 +242,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_req_resp",
 			payload:      []byte(`{"name":"John","age":}`),
 			expectedCode: 10005,
-			expectedMsg:  "failed to parse request:",
+			expectedMsg:  "parse request err",
 			expectResp:   false,
 		},
 		{
@@ -250,7 +250,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_pointer_req",
 			payload:      []byte(`{"id":"test123","value":42}`),
 			expectedCode: 0,
-			expectedMsg:  "success",
+			expectedMsg:  "ok",
 			expectResp:   true,
 		},
 		{
@@ -266,7 +266,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_simple_string_to_bool",
 			payload:      []byte{},
 			expectedCode: 0,
-			expectedMsg:  "success",
+			expectedMsg:  "ok",
 			expectResp:   true,
 		},
 		{
@@ -274,7 +274,7 @@ func TestDispatcherDispatch(t *testing.T) {
 			command:      "test_simple_string_to_bool",
 			payload:      []byte(`"a very very very very long message"`),
 			expectedCode: 10005,
-			expectedMsg:  "input too long",
+			expectedMsg:  "input is too long",
 			expectResp:   false,
 		},
 	}
@@ -350,7 +350,7 @@ func TestCallFunc(t *testing.T) {
 		resp, ok := results[0].(*TestResponse)
 		assert.True(t, ok)
 		assert.Equal(t, "Hello John, age 30", resp.Message)
-		assert.Equal(t, "success", resp.Status)
+		assert.Equal(t, "ok", resp.Status)
 
 		assert.Nil(t, results[1])
 	})
